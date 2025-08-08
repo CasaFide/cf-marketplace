@@ -15,6 +15,38 @@ interface PropertyDetailsModalProps {
 
 export const PropertyDetailsModal = ({ open, onClose, property }: PropertyDetailsModalProps) => {
   if (!property) return null;
+
+  // Robust amenities handling
+  const amenitiesRaw = property.amenities;
+  let amenities: string[] = [];
+  if (Array.isArray(amenitiesRaw)) {
+    amenities = amenitiesRaw;
+  } else if (typeof amenitiesRaw === 'string') {
+    try {
+      const parsed = JSON.parse(amenitiesRaw);
+      if (Array.isArray(parsed)) {
+        amenities = parsed;
+      } else if (parsed) {
+        amenities = [parsed];
+      }
+    } catch {
+      amenities = [amenitiesRaw];
+    }
+  } else if (typeof amenitiesRaw === 'object' && amenitiesRaw !== null) {
+    amenities = Object.values(amenitiesRaw).map(String);
+  }
+
+  // Robust image handling for both array and stringified array
+  let imagesArr: string[] = [];
+  if (Array.isArray(property.images)) {
+    imagesArr = property.images;
+  } else if (typeof property.images === 'string') {
+    try {
+      const parsed = JSON.parse(property.images);
+      if (Array.isArray(parsed)) imagesArr = parsed;
+    } catch {}
+  }
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
@@ -26,9 +58,9 @@ export const PropertyDetailsModal = ({ open, onClose, property }: PropertyDetail
           </DialogDescription>
         </DialogHeader>
         <div className="mb-4">
-          {Array.isArray(property.images) && property.images.length > 0 && (
+          {imagesArr.length > 0 && (
             <img
-              src={property.images[0]}
+              src={imagesArr[0]}
               alt={property.title}
               className="w-full h-64 object-cover rounded-lg mb-4"
             />
@@ -42,9 +74,9 @@ export const PropertyDetailsModal = ({ open, onClose, property }: PropertyDetail
             {property.is_available ? <Badge variant="default">Available</Badge> : <Badge variant="destructive">Unavailable</Badge>}
           </div>
           <div className="mb-2 text-muted-foreground">{property.description}</div>
-          {property.amenities && property.amenities.length > 0 && (
+          {amenities.length > 0 && (
             <div className="mb-2">
-              <span className="font-semibold">Amenities:</span> {property.amenities.join(', ')}
+              <span className="font-semibold">Amenities:</span> {amenities.join(', ')}
             </div>
           )}
         </div>

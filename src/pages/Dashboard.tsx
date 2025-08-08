@@ -6,10 +6,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 import { Navigation } from '@/components/Navigation';
 import { CreatePropertyDetailsModal } from '@/components/CreatePropertyDetailsModal';
+import { PropertyDetailsModal } from '@/components/PropertyDetailsModal';
+import { UpdatePropertyDetailsModal } from '@/components/UpdatePropertyDetailsModal';
+import { useToast } from '@/hooks/use-toast';
+import { MapPin } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 type PropertyInsert = Database['public']['Tables']['properties']['Insert'];
+type PropertyUpdate = Database['public']['Tables']['properties']['Update'];
 
 interface Match {
   id: string;
@@ -21,19 +27,19 @@ interface Match {
   property: {
     title: string;
     property_type: string;
-    bedrooms: number;
-    bathrooms: number;
+    bedrooms: number | null;
+    bathrooms: number | null;
     price_per_month: number;
-    currency: string;
+    currency: string | null;
     city: string;
     country: string;
   };
   host_profile: {
-    full_name: string;
+    full_name: string | null;
     avatar_url: string | null;
   };
   tenant_profile: {
-    full_name: string;
+    full_name: string | null;
     avatar_url: string | null;
   };
 }
@@ -41,9 +47,14 @@ interface Match {
 const Dashboard = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { toast } = useToast();
   const [matches, setMatches] = useState<Match[]>([]);
+  const [userProperties, setUserProperties] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [propertyModalOpen, setPropertyModalOpen] = useState(false);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [selectedProperty, setSelectedProperty] = useState<any>(null);
   // Create property handler
   const handleCreateProperty = async (property: PropertyInsert) => {
     // Set host_id to current user
@@ -51,7 +62,8 @@ const Dashboard = () => {
     const propertyWithHost = { ...property, host_id: user.id };
     const { error } = await supabase.from('properties').insert([propertyWithHost]);
     if (!error) {
-      // Optionally, refetch properties or show a toast
+      // Refetch properties to show the new one
+      fetchUserProperties();
       toast({ title: 'Property created!' });
     }
   };
@@ -59,6 +71,7 @@ const Dashboard = () => {
   useEffect(() => {
     if (user) {
       fetchMatches();
+      fetchUserProperties();
     }
   }, [user]);
 
@@ -95,6 +108,62 @@ const Dashboard = () => {
       console.error('Error fetching matches:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleViewPropertyDetails = (property: any) => {
+    setSelectedProperty(property);
+    setPropertyModalOpen(true);
+  };
+
+  const handleClosePropertyModal = () => {
+    setPropertyModalOpen(false);
+    setSelectedProperty(null);
+  };
+
+  const handleUpdateProperty = (property: any) => {
+    setSelectedProperty(property);
+    setUpdateModalOpen(true);
+  };
+
+  const handleCloseUpdateModal = () => {
+    setUpdateModalOpen(false);
+    setSelectedProperty(null);
+  };
+
+  const handlePropertyUpdate = async (property: PropertyUpdate) => {
+    if (!selectedProperty) return;
+    
+    const { error } = await supabase
+      .from('properties')
+      .update(property)
+      .eq('id', selectedProperty.id);
+      
+    if (!error) {
+      // Refetch properties to show the updated one
+      fetchUserProperties();
+      toast({ title: 'Property updated successfully!' });
+      setUpdateModalOpen(false);
+      setSelectedProperty(null);
+    } else {
+      toast({ title: 'Error updating property', variant: 'destructive' });
+    }
+  };
+
+  const fetchUserProperties = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('properties')
+        .select('*')
+        .eq('host_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setUserProperties(data || []);
+    } catch (error) {
+      console.error('Error fetching user properties:', error);
     }
   };
 
@@ -157,12 +226,26 @@ const Dashboard = () => {
         onClose={() => setCreateModalOpen(false)}
         onCreate={handleCreateProperty}
       />
+      <PropertyDetailsModal 
+        open={propertyModalOpen} 
+        onClose={handleClosePropertyModal} 
+        property={selectedProperty} 
+      />
+      {selectedProperty && (
+        <UpdatePropertyDetailsModal
+          open={updateModalOpen}
+          onClose={handleCloseUpdateModal}
+          property={selectedProperty}
+          onUpdate={handlePropertyUpdate}
+        />
+      )}
 
           <Tabs defaultValue="all" className="space-y-4">
             <TabsList>
               <TabsTrigger value="all">{t('myMatches')}</TabsTrigger>
               <TabsTrigger value="active">{t('activeRentals')} ({activeMatches.length})</TabsTrigger>
               <TabsTrigger value="pending">{t('pendingRequests')} ({pendingMatches.length})</TabsTrigger>
+              <TabsTrigger value="properties">My Properties ({userProperties.length})</TabsTrigger>
             </TabsList>
 
             <TabsContent value="all" className="space-y-4">
@@ -182,8 +265,8 @@ const Dashboard = () => {
                             <CardTitle className="text-lg">{match.property.title}</CardTitle>
                             <CardDescription>
                               {match.property.city}, {match.property.country} • 
-                              {match.property.bedrooms} {t('bedrooms')} • 
-                              {match.property.bathrooms} {t('bathrooms')}
+                              {match.property.bedrooms || 0} {t('bedrooms')} • 
+                              {match.property.bathrooms || 0} {t('bathrooms')}
                             </CardDescription>
                           </div>
                           <Badge variant={getStatusColor(match.status)}>
@@ -209,7 +292,7 @@ const Dashboard = () => {
                             <div>
                               <p className="font-medium">Monthly Rent</p>
                               <p className="text-muted-foreground">
-                                {match.property.currency} {match.monthly_rent}
+                                {match.property.currency || 'EUR'} {match.monthly_rent}
                               </p>
                             </div>
                           )}
@@ -249,7 +332,7 @@ const Dashboard = () => {
                         <div>
                           <p className="font-medium">Monthly Rent</p>
                           <p className="text-lg font-bold text-primary">
-                            {match.property.currency} {match.monthly_rent || match.property.price_per_month}
+                            {match.property.currency || 'EUR'} {match.monthly_rent || match.property.price_per_month}
                           </p>
                         </div>
                         <div>
@@ -289,7 +372,7 @@ const Dashboard = () => {
                       <div className="space-y-2">
                         <p className="text-sm">
                           <span className="font-medium">Requested rent:</span>{' '}
-                          {match.property.currency} {match.monthly_rent || match.property.price_per_month} {t('perMonth')}
+                          {match.property.currency || 'EUR'} {match.monthly_rent || match.property.price_per_month} {t('perMonth')}
                         </p>
                         {match.message && (
                           <p className="text-sm">
@@ -306,6 +389,78 @@ const Dashboard = () => {
                       <p className="text-muted-foreground">No pending requests</p>
                     </CardContent>
                   </Card>
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="properties" className="space-y-4">
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {userProperties.map((property) => (
+                  <Card key={property.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                    <div className="aspect-video relative overflow-hidden">
+                      <img
+                        src={Array.isArray(property.images) && property.images.length > 0 ? property.images[0] : '/placeholder.svg'}
+                        alt={property.title}
+                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                      />
+                      <Badge className="absolute top-4 left-4 bg-white/90 text-foreground">
+                        {property.property_type}
+                      </Badge>
+                    </div>
+                    <CardHeader>
+                      <CardTitle className="text-xl">{property.title}</CardTitle>
+                      <CardDescription className="flex items-center">
+                        <MapPin className="h-4 w-4 mr-1" />
+                        {property.city}, {property.country}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                          <span>{property.bedrooms || 0} bedrooms</span>
+                          <span>{property.bathrooms || 0} bathrooms</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-2xl font-bold text-primary">
+                            {property.currency || 'EUR'} {property.price_per_month}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            per month
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          className="flex-1" 
+                          variant="outline" 
+                          onClick={() => handleViewPropertyDetails(property)}
+                        >
+                          View Details
+                        </Button>
+                        <Button 
+                          className="flex-1" 
+                          variant="default" 
+                          onClick={() => handleUpdateProperty(property)}
+                        >
+                          Update Property
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                {userProperties.length === 0 && (
+                  <div className="col-span-full">
+                    <Card>
+                      <CardContent className="p-6 text-center">
+                        <p className="text-muted-foreground mb-4">You haven't created any properties yet</p>
+                        <Button
+                          onClick={() => setCreateModalOpen(true)}
+                        >
+                          Create Your First Property
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </div>
                 )}
               </div>
             </TabsContent>
