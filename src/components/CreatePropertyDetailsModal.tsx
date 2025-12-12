@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState, useRef, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { presignUpload, uploadToUrl } from '@/integrations/apiClient';
 import type { Database } from "@/integrations/supabase/types";
 
 // Type for Nominatim location result
@@ -179,7 +179,7 @@ export function CreatePropertyDetailsModal({ open, onClose, onCreate }: Props) {
     });
   };
 
-  // Handle file uploads to Supabase Storage
+  // Handle file uploads using presigned URLs from backend
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -192,24 +192,24 @@ export function CreatePropertyDetailsModal({ open, onClose, onCreate }: Props) {
         setUploadError("Only .jpg and .png files are allowed.");
         continue;
       }
-      // Unique filename: propertyId in filename + timestamp + random + original name
-      const ext = file.name.split(".").pop();
-      const filePath = `property-images/${Date.now()}-${propertyId}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error } = await supabase.storage
-        .from("property-images")
-        .upload(filePath, file, { upsert: false });
-      if (error) {
-        setUploadError(`Upload failed: ${error.message}`);
+      try {
+        const ext = file.name.split('.').pop() || '';
+        const filename = `${Date.now()}-${propertyId}-${Math.random().toString(36).slice(2)}.${ext}`;
+        // Ask backend for presigned URL
+        const presign = await presignUpload(filename, file.type, 'property-images');
+        // presign should return { upload_url, public_url }
+        if (presign?.upload_url) {
+          await uploadToUrl(presign.upload_url, file, file.type);
+          if (presign.public_url) uploadedUrls.push(presign.public_url);
+        } else if (presign?.public_url) {
+          // Backend may accept multipart and return public_url directly
+          uploadedUrls.push(presign.public_url);
+        } else {
+          setUploadError('Could not get presigned upload URL');
+        }
+      } catch (err: any) {
+        setUploadError(err?.message || 'Upload failed');
         continue;
-      }
-      // Get public URL
-      const { data } = supabase.storage
-        .from("property-images")
-        .getPublicUrl(filePath);
-      if (data?.publicUrl) {
-        uploadedUrls.push(data.publicUrl);
-      } else {
-        setUploadError("Could not get public URL for uploaded image.");
       }
     }
     if (uploadedUrls.length > 0) {
@@ -219,8 +219,7 @@ export function CreatePropertyDetailsModal({ open, onClose, onCreate }: Props) {
       }));
     }
     setUploading(false);
-    // Reset file input
-    e.target.value = "";
+    e.target.value = '';
   };
 
   const handleSubmit = (e: React.FormEvent) => {

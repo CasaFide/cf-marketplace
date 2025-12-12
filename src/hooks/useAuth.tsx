@@ -1,15 +1,14 @@
 import { useState, useEffect, createContext, useContext } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
+import { apiFetch, setAccessToken, getAccessToken } from '@/integrations/apiClient';
 
 interface AuthContextType {
-  user: User | null;
-  session: Session | null;
+  user: any | null;
+  token: string | null;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
-  signInWithGoogle: () => Promise<{ error: any }>;
-  signInWithMicrosoft: () => Promise<{ error: any }>;
-  signOut: () => Promise<{ error: any }>;
+  signInWithGoogle: () => Promise<void>;
+  signInWithMicrosoft: () => Promise<void>;
+  signOut: () => Promise<void>;
   loading: boolean;
 }
 
@@ -24,89 +23,118 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<any | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+    // 1) Look for access_token in URL (query string or hash) — useful for OAuth redirects
+    try {
+      const url = new URL(window.location.href);
+      // check query param first
+      let tokenFromUrl = url.searchParams.get('access_token');
+      // fallback: some providers return token in hash fragment `#access_token=...`
+      if (!tokenFromUrl && window.location.hash) {
+        const hash = window.location.hash.replace(/^#/, '');
+        const params = new URLSearchParams(hash);
+        tokenFromUrl = params.get('access_token');
       }
-    );
 
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+      if (tokenFromUrl) {
+        setAccessToken(tokenFromUrl);
+        setToken(tokenFromUrl);
+        try {
+          const payload = JSON.parse(atob(tokenFromUrl.split('.')[1]));
+          setUser({ id: payload.sub || payload.id, email: payload.email, ...payload });
+        } catch {
+          setUser(null);
+        }
+        // Remove token from URL (clean up)
+        try {
+          // remove access_token from query
+          url.searchParams.delete('access_token');
+          // also remove hash entirely
+          window.history.replaceState({}, document.title, url.pathname + url.search);
+        } catch {}
+        setLoading(false);
+        return;
+      }
 
-    return () => subscription.unsubscribe();
+      // 2) Otherwise, read token from localStorage
+      const t = getAccessToken();
+      if (t) {
+        setToken(t);
+        try {
+          const payload = JSON.parse(atob(t.split('.')[1]));
+          setUser({ id: payload.sub || payload.id, email: payload.email, ...payload });
+        } catch {
+          setUser(null);
+        }
+      }
+    } catch (err) {
+      // ignore parsing errors
+    }
+    setLoading(false);
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (data?.session?.access_token) {
-      localStorage.setItem('access_token', data.session.access_token);
+    try {
+      const data = await apiFetch('/oauth2/login', { method: 'POST', body: JSON.stringify({ username: email, password }) });
+      const token = data?.access_token || data?.token || null;
+      if (token) {
+        setAccessToken(token);
+        setToken(token);
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          setUser({ id: payload.sub, email: payload.email, ...payload });
+        } catch {
+          setUser(null);
+        }
+      }
+      return { error: null };
+    } catch (err: any) {
+      return { error: err };
     }
-    return { error };
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName,
-        },
-      },
-    });
-    return { error };
+    try {
+      const data = await apiFetch('/oauth2/signup', { method: 'POST', body: JSON.stringify({ email, password, full_name: fullName }) });
+      const token = data?.access_token || data?.token || null;
+      if (token) {
+        setAccessToken(token);
+        setToken(token);
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          setUser({ id: payload.sub, email: payload.email, ...payload });
+        } catch {
+          setUser(null);
+        }
+      }
+      return { error: null };
+    } catch (err: any) {
+      return { error: err };
+    }
   };
 
   const signInWithGoogle = async () => {
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: redirectUrl,
-      },
-    });
-    return { error };
+    // Redirect browser to backend google auth endpoint which will forward to provider
+    window.location.href = `${(import.meta.env.VITE_API_BASE as string) || 'http://localhost:8000'}/google/login`;
   };
 
   const signInWithMicrosoft = async () => {
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'azure',
-      options: {
-        redirectTo: redirectUrl,
-      },
-    });
-    return { error };
+    window.location.href = `${(import.meta.env.VITE_API_BASE as string) || 'http://localhost:8000'}/microsoft/login`;
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    return { error };
+    setAccessToken(null);
+    setToken(null);
+    setUser(null);
   };
 
   const value = {
     user,
-    session,
+    token,
     signIn,
     signUp,
     signInWithGoogle,

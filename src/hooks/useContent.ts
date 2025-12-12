@@ -1,17 +1,14 @@
 
 import { useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { apiFetch } from '@/integrations/apiClient';
+
 
 export const useContent = () => {
 
   // Fetch public properties (no auth required, e.g. is_available = true)
   const getPublicProperties = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('properties')
-        .select('*')
-        .eq('is_available', true);
-      if (error) throw error;
+      const data = await apiFetch('/properties?available=true');
       return data;
     } catch (error) {
       return { error };
@@ -21,12 +18,8 @@ export const useContent = () => {
   // Fetch private properties (e.g. properties for the current user/host)
   const getPrivateProperties = useCallback(async () => {
     try {
-      // Assumes RLS is set up so only the user's own properties are returned
-      const { data, error } = await supabase
-        .from('properties')
-        .select('*')
-        .eq('host_id', supabase.auth.getUser()?.data?.user?.id || '');
-      if (error) throw error;
+      // Backend should use auth token to return only properties for current host
+      const data = await apiFetch('/properties?mine=true');
       return data;
     } catch (error) {
       return { error };

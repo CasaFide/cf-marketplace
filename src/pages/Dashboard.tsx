@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { apiFetch } from '@/integrations/apiClient';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -57,14 +57,13 @@ const Dashboard = () => {
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
   // Create property handler
   const handleCreateProperty = async (property: PropertyInsert) => {
-    // Set host_id to current user
     if (!user) return;
-    const propertyWithHost = { ...property, host_id: user.id };
-    const { error } = await supabase.from('properties').insert([propertyWithHost]);
-    if (!error) {
-      // Refetch properties to show the new one
+    try {
+      const created = await apiFetch('/properties', { method: 'POST', body: JSON.stringify(property) });
       fetchUserProperties();
       toast({ title: 'Property created!' });
+    } catch (err) {
+      toast({ title: 'Error creating property', variant: 'destructive' });
     }
   };
 
@@ -77,32 +76,7 @@ const Dashboard = () => {
 
   const fetchMatches = async () => {
     try {
-      const { data, error } = await supabase
-        .from('matches')
-        .select(`
-          *,
-          property:properties(
-            title,
-            property_type,
-            bedrooms,
-            bathrooms,
-            price_per_month,
-            currency,
-            city,
-            country
-          ),
-          host_profile:profiles!matches_host_id_fkey(
-            full_name,
-            avatar_url
-          ),
-          tenant_profile:profiles!matches_tenant_id_fkey(
-            full_name,
-            avatar_url
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await apiFetch('/matches');
       setMatches(data || []);
     } catch (error) {
       console.error('Error fetching matches:', error);
@@ -133,19 +107,13 @@ const Dashboard = () => {
 
   const handlePropertyUpdate = async (property: PropertyUpdate) => {
     if (!selectedProperty) return;
-    
-    const { error } = await supabase
-      .from('properties')
-      .update(property)
-      .eq('id', selectedProperty.id);
-      
-    if (!error) {
-      // Refetch properties to show the updated one
+    try {
+      await apiFetch(`/properties/${selectedProperty.id}`, { method: 'PUT', body: JSON.stringify(property) });
       fetchUserProperties();
       toast({ title: 'Property updated successfully!' });
       setUpdateModalOpen(false);
       setSelectedProperty(null);
-    } else {
+    } catch (err) {
       toast({ title: 'Error updating property', variant: 'destructive' });
     }
   };
@@ -154,13 +122,7 @@ const Dashboard = () => {
     if (!user) return;
     
     try {
-      const { data, error } = await supabase
-        .from('properties')
-        .select('*')
-        .eq('host_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await apiFetch('/properties?mine=true');
       setUserProperties(data || []);
     } catch (error) {
       console.error('Error fetching user properties:', error);
