@@ -13,7 +13,7 @@ import type { Database } from '@/integrations/supabase/types';
 
 type Property = Database['public']['Tables']['properties']['Row'];
 import { Search, MapPin, Users, Key, Heart } from 'lucide-react';
-import heroImage from '@/assets/hero-home.jpg';
+import heroImage from '@/assets/hero-home.jpeg';
 import apartmentImage from '@/assets/featured-apartment.jpg';
 
 const Index = () => {
@@ -160,7 +160,7 @@ const Index = () => {
                     <CardTitle className="text-xl">{property.title}</CardTitle>
                     <CardDescription className="flex items-center">
                       <MapPin className="h-4 w-4 mr-1" />
-                      {property.city}, {property.country}
+                      {property.address}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>

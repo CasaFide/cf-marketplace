@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
-import { apiFetch } from '@/integrations/apiClient';
+import { apiFetch, updateMatch } from '@/integrations/apiClient';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -31,6 +31,7 @@ interface Match {
     bathrooms: number | null;
     price_per_month: number;
     currency: string | null;
+    address?: string | null;
     city: string;
     country: string;
   };
@@ -143,6 +144,17 @@ const Dashboard = () => {
     return matches.filter(match => match.status === status);
   };
 
+  const handleUpdateMatchStatus = async (matchId: string, status: string) => {
+    try {
+      await updateMatch(matchId, { status });
+      toast({ title: `Match ${status}` });
+      fetchMatches();
+    } catch (err) {
+      console.error('Error updating match:', err);
+      toast({ title: 'Error updating match', variant: 'destructive' });
+    }
+  };
+
   const activeMatches = matches.filter(match => match.status === 'active');
   const pendingMatches = matches.filter(match => match.status === 'pending');
 
@@ -224,11 +236,11 @@ const Dashboard = () => {
                       <CardHeader>
                         <div className="flex justify-between items-start">
                           <div>
-                            <CardTitle className="text-lg">{match.property.title}</CardTitle>
+                            <CardTitle className="text-lg">{match.property?.title ?? 'Untitled'}</CardTitle>
                             <CardDescription>
-                              {match.property.city}, {match.property.country} • 
-                              {match.property.bedrooms || 0} {t('bedrooms')} • 
-                              {match.property.bathrooms || 0} {t('bathrooms')}
+                              {match.property?.address ?? `${match.property?.city ?? ''}${match.property?.city && match.property?.country ? ', ' : ''}${match.property?.country ?? ''}`} •
+                              {match.property?.bedrooms ?? 0} {t('bedrooms')} • 
+                              {match.property?.bathrooms ?? 0} {t('bathrooms')}
                             </CardDescription>
                           </div>
                           <Badge variant={getStatusColor(match.status)}>
@@ -241,20 +253,20 @@ const Dashboard = () => {
                           <div>
                             <p className="font-medium">Host</p>
                             <p className="text-muted-foreground">
-                              {match.host_profile?.full_name || 'Unknown'}
+                              {match.host_profile?.full_name ?? 'Unknown'}
                             </p>
                           </div>
                           <div>
                             <p className="font-medium">Tenant</p>
                             <p className="text-muted-foreground">
-                              {match.tenant_profile?.full_name || 'Unknown'}
+                              {match.tenant_profile?.full_name ?? 'Unknown'}
                             </p>
                           </div>
                           {match.monthly_rent && (
                             <div>
                               <p className="font-medium">Monthly Rent</p>
                               <p className="text-muted-foreground">
-                                {match.property.currency || 'EUR'} {match.monthly_rent}
+                                {match.property?.currency ?? 'EUR'} {match.monthly_rent}
                               </p>
                             </div>
                           )}
@@ -284,9 +296,9 @@ const Dashboard = () => {
                 {activeMatches.map((match) => (
                   <Card key={match.id}>
                     <CardHeader>
-                      <CardTitle className="text-lg">{match.property.title}</CardTitle>
+                      <CardTitle className="text-lg">{match.property?.title ?? 'Untitled'}</CardTitle>
                       <CardDescription>
-                        Active rental • {match.property.city}, {match.property.country}
+                        Active rental • {match.property?.city ?? ''}{match.property?.city && match.property?.country ? ', ' : ''}{match.property?.country ?? ''}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -294,7 +306,7 @@ const Dashboard = () => {
                         <div>
                           <p className="font-medium">Monthly Rent</p>
                           <p className="text-lg font-bold text-primary">
-                            {match.property.currency || 'EUR'} {match.monthly_rent || match.property.price_per_month}
+                            {match.property?.currency ?? 'EUR'} {match.monthly_rent ?? match.property?.price_per_month}
                           </p>
                         </div>
                         <div>
@@ -325,22 +337,26 @@ const Dashboard = () => {
                 {pendingMatches.map((match) => (
                   <Card key={match.id}>
                     <CardHeader>
-                      <CardTitle className="text-lg">{match.property.title}</CardTitle>
+                      <CardTitle className="text-lg">{match.property?.title ?? 'Untitled'}</CardTitle>
                       <CardDescription>
-                        Pending approval • {match.property.city}, {match.property.country}
+                        Pending approval • {match.property?.city ?? ''}{match.property?.city && match.property?.country ? ', ' : ''}{match.property?.country ?? ''}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
                         <p className="text-sm">
                           <span className="font-medium">Requested rent:</span>{' '}
-                          {match.property.currency || 'EUR'} {match.monthly_rent || match.property.price_per_month} {t('perMonth')}
+                          {match.property?.currency ?? 'EUR'} {match.monthly_rent ?? match.property?.price_per_month} {t('perMonth')}
                         </p>
                         {match.message && (
                           <p className="text-sm">
                             <span className="font-medium">Message:</span> {match.message}
                           </p>
                         )}
+                      </div>
+                      <div className="flex gap-2 mt-4">
+                        <Button onClick={() => handleUpdateMatchStatus(match.id, 'accepted')} variant="default">Accept</Button>
+                        <Button onClick={() => handleUpdateMatchStatus(match.id, 'rejected')} variant="destructive">Reject</Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -373,7 +389,7 @@ const Dashboard = () => {
                       <CardTitle className="text-xl">{property.title}</CardTitle>
                       <CardDescription className="flex items-center">
                         <MapPin className="h-4 w-4 mr-1" />
-                        {property.city}, {property.country}
+                        {property.address}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>

@@ -12,6 +12,9 @@ import { Label } from "@/components/ui/label";
 import { useState, useRef, useEffect } from "react";
 import { presignUpload, uploadToUrl } from '@/integrations/apiClient';
 import type { Database } from "@/integrations/supabase/types";
+// Max upload size in bytes (configurable via VITE_MAX_UPLOAD_MB)
+const MAX_UPLOAD_MB = Number(import.meta.env.VITE_MAX_UPLOAD_MB) || 5;
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
 type PropertyUpdate = Database["public"]["Tables"]["properties"]["Update"];
 
@@ -151,6 +154,11 @@ export function UpdatePropertyDetailsModal({ open, onClose, property, onUpdate }
     const uploadedUrls: string[] = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      // Client-side size validation
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setUploadError(`File ${file.name} is too large. Max ${MAX_UPLOAD_MB} MB allowed.`);
+        continue;
+      }
       if (!["image/jpeg", "image/png"].includes(file.type)) {
         setUploadError("Only .jpg and .png files are allowed.");
         continue;

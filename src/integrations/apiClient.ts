@@ -58,3 +58,17 @@ export function setAccessToken(token: string | null) {
 export function getAccessToken() {
   return getToken();
 }
+
+// Matches helpers
+export async function listMatches(status?: string | null) {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  return apiFetch(`/matches${qs}`);
+}
+
+export async function createMatch(payload: any) {
+  return apiFetch('/matches', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateMatch(matchId: string, payload: any) {
+  return apiFetch(`/matches/${matchId}`, { method: 'PUT', body: JSON.stringify(payload) });
+}

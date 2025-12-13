@@ -236,7 +236,7 @@ const SearchPage = () => {
             ${imageUrl ? `<img src="${imageUrl}" alt="${property.title}" style="width:100%;height:110px;object-fit:cover;display:block;" />` : ''}
             <div style="padding:12px 14px 10px 14px;">
               <div style="font-weight:600;font-size:1.08rem;line-height:1.3;margin-bottom:2px;color:#1e293b;">${property.title}</div>
-              <div style="color:#64748b;font-size:0.97rem;margin-bottom:6px;">${property.city}, ${property.country}</div>
+              <div style="color:#64748b;font-size:0.97rem;margin-bottom:6px;">${property.address}</div>
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
                 <span style="font-size:1.1rem;font-weight:500;color:#2563eb;">${property.currency} ${property.price_per_month}</span>
                 <span style="font-size:0.95rem;color:#64748b;">/month</span>
@@ -354,7 +354,7 @@ const SearchPage = () => {
                     <CardTitle className="text-xl">{property.title}</CardTitle>
                     <CardDescription className="flex items-center">
                       <MapPin className="h-4 w-4 mr-1" />
-                      {property.city}, {property.country}
+                      {property.address}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>

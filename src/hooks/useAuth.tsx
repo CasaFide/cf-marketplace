@@ -5,9 +5,9 @@ interface AuthContextType {
   user: any | null;
   token: string | null;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
-  signInWithGoogle: () => Promise<void>;
-  signInWithMicrosoft: () => Promise<void>;
+  signUp: (email: string, password: string, first_name: string, last_name: string) => Promise<{ error: any }>;
+  signInWithGoogle: () => Promise<{ error: any }>;
+  signInWithMicrosoft: () => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   loading: boolean;
 }
@@ -79,7 +79,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const data = await apiFetch('/oauth2/login', { method: 'POST', body: JSON.stringify({ username: email, password }) });
+      const data = await apiFetch('/oauth2/login', { method: 'POST', body: JSON.stringify({ email, password }) });
       const token = data?.access_token || data?.token || null;
       if (token) {
         setAccessToken(token);
@@ -97,9 +97,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string, first_name: string, last_name: string) => {
     try {
-      const data = await apiFetch('/oauth2/signup', { method: 'POST', body: JSON.stringify({ email, password, full_name: fullName }) });
+      const data = await apiFetch('/oauth2/signup', { method: 'POST', body: JSON.stringify({ email, password, first_name, last_name }) });
       const token = data?.access_token || data?.token || null;
       if (token) {
         setAccessToken(token);
@@ -120,10 +120,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signInWithGoogle = async () => {
     // Redirect browser to backend google auth endpoint which will forward to provider
     window.location.href = `${(import.meta.env.VITE_API_BASE as string) || 'http://localhost:8000'}/google/login`;
+    return { error: null };
   };
 
   const signInWithMicrosoft = async () => {
     window.location.href = `${(import.meta.env.VITE_API_BASE as string) || 'http://localhost:8000'}/microsoft/login`;
+    return { error: null };
   };
 
   const signOut = async () => {

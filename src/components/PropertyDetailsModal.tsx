@@ -2,6 +2,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { MapPin } from 'lucide-react';
+import { useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { createMatch } from '@/integrations/apiClient';
+import { useToast } from '@/hooks/use-toast';
 
 
 import type { Database } from '@/integrations/supabase/types';
@@ -14,6 +18,11 @@ interface PropertyDetailsModalProps {
 }
 
 export const PropertyDetailsModal = ({ open, onClose, property }: PropertyDetailsModalProps) => {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [requesting, setRequesting] = useState(false);
+  const [rentInput, setRentInput] = useState<string>('');
+  const [messageInput, setMessageInput] = useState<string>('');
   if (!property) return null;
 
   // Robust amenities handling
@@ -54,7 +63,7 @@ export const PropertyDetailsModal = ({ open, onClose, property }: PropertyDetail
           <DialogTitle>{property.title}</DialogTitle>
           <DialogDescription className="flex items-center gap-2 mt-2">
             <MapPin className="h-4 w-4" />
-            {property.address}, {property.city}, {property.country}
+            {property.address}
           </DialogDescription>
         </DialogHeader>
         <div className="mb-4">
@@ -83,6 +92,55 @@ export const PropertyDetailsModal = ({ open, onClose, property }: PropertyDetail
         <DialogClose asChild>
           <Button variant="outline" className="w-full mt-2">Close</Button>
         </DialogClose>
+        {/* If user is logged in and property is available, show request form */}
+        {user && property.is_available && (
+          <div className="mt-4">
+            <h3 className="font-medium mb-2">Request to Rent</h3>
+            <div className="grid gap-2">
+              <input
+                type="number"
+                placeholder="Monthly rent (optional)"
+                value={rentInput}
+                onChange={(e) => setRentInput(e.target.value)}
+                className="border rounded p-2"
+              />
+              <textarea
+                placeholder="Message to host (optional)"
+                value={messageInput}
+                onChange={(e) => setMessageInput(e.target.value)}
+                className="border rounded p-2"
+                rows={3}
+              />
+              <Button
+                onClick={async () => {
+                  if (!user) return toast({ title: 'You must be logged in to request', variant: 'destructive' });
+                  setRequesting(true);
+                  try {
+                    const payload = {
+                      property_id: property.id,
+                      tenant_id: user.id,
+                      monthly_rent: rentInput ? Number(rentInput) : undefined,
+                      message: messageInput || undefined,
+                    };
+                    await createMatch(payload);
+                    toast({ title: 'Request sent' });
+                    setRentInput('');
+                    setMessageInput('');
+                    onClose();
+                  } catch (err) {
+                    console.error('Error creating match', err);
+                    toast({ title: 'Error sending request', variant: 'destructive' });
+                  } finally {
+                    setRequesting(false);
+                  }
+                }}
+                disabled={requesting}
+              >
+                {requesting ? 'Sending...' : 'Send Request'}
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
